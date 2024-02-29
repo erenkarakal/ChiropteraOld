@@ -1,0 +1,13 @@
+type: server
+
+host: 0.0.0.0 # skip this if type is 'server'
+port: 25579
+
+# Capacity, in bytes that the connection accepts.
+# This is the recommended value.
+capacity: 1024
+
+# The secret required to connect to the server (or to accept connections as the server).
+# Make it strong and do not share it with anyone, obviously.
+# All of your servers must have the same secret.
+secret: 123abc

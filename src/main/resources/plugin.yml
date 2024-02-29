@@ -1,0 +1,5 @@
+name: Chiroptera
+version: '${project.version}'
+main: me.eren.chiroptera.Chiroptera
+api-version: '1.17'
+author: eren.
