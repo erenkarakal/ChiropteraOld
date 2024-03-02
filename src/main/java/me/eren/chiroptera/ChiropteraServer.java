@@ -38,10 +38,13 @@ public class ChiropteraServer {
                         // accept a new connection
                         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
                         SocketChannel clientChannel = serverChannel.accept();
-                        clientChannel.configureBlocking(false);
-                        clientChannel.register(selector, SelectionKey.OP_READ);
-                        Chiroptera.getLog().info("A client connected! (" + getFormattedAddress(clientChannel) + ")");
-
+                        if (clientChannel != null) {
+                            clientChannel.configureBlocking(false);
+                            clientChannel.register(selector, SelectionKey.OP_READ);
+                            Chiroptera.getLog().info("A client connected! (" + getFormattedAddress(clientChannel) + ")");
+                        } else {
+                            Chiroptera.getLog().warning("Got null client? This is not good.");
+                        }
                     } else if (key.isReadable()) {
                         // read data from a connected client
                         SocketChannel clientChannel = (SocketChannel) key.channel();
@@ -51,22 +54,23 @@ public class ChiropteraServer {
 
                         buffer.flip();
                         String data = new String(buffer.array(), 0, bytesRead).trim();
+                        if (data.isEmpty()) continue; // we don't want empty data
 
                         // authenticate the client
                         if (!authenticatedClients.contains(clientChannel)) {
                             if (data.equals(secret)) {
                                 authenticatedClients.add(clientChannel);
                                 Chiroptera.getLog().info("A client authenticated! (" + getFormattedAddress(clientChannel) + ")");
-
                             } else {
                                 Chiroptera.getLog().info("A client was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
                                 clientChannel.close();
                             }
-                        } else { // the client is authenticated.
+                        } else { // the client is already authenticated. process the data
                             Chiroptera.getLog().info("received data: " + data);
                         }
                     }
                 }
+                selector.selectedKeys().clear();
             }
         } catch (IOException e) {
             throw new RuntimeException("Error while starting the server", e);
@@ -77,7 +81,7 @@ public class ChiropteraServer {
      * Broadcasts a message to all authenticated clients.
      * @param message Message to broadcast
      */
-    private static void broadcastMessage(String message) {
+    public static void broadcastMessage(String message) {
         try {
             ByteBuffer messageBuffer = ByteBuffer.wrap(message.getBytes());
 
