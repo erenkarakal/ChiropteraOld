@@ -15,7 +15,6 @@ public final class Chiroptera extends JavaPlugin {
     public void onEnable() {
         instance = this;
         logger = getLogger();
-        logger.info("Enabling Chiroptera " + getDescription().getVersion());
 
         saveDefaultConfig();
 
@@ -48,7 +47,6 @@ public final class Chiroptera extends JavaPlugin {
     public void onDisable() {
         ChiropteraServer.shouldListen = false;
         ChiropteraClient.shouldDisconnect = true;
-        logger.info("Disabling Chiroptera " + getDescription().getVersion());
     }
 
     public static Logger getLog() {
