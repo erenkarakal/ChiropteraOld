@@ -80,7 +80,7 @@ public class ChiropteraServer {
             if (e instanceof SocketException) { // remove all disconnected clients
                 authenticatedClients.entrySet().removeIf(entry -> {
                     if (!entry.getValue().isConnected()) {
-                        System.out.println("A client named " + entry.getKey() + " disconnected.");
+                        Chiroptera.getLog().warning("A client named " + entry.getKey() + " disconnected.");
                         return true;
                     }
                     return false;
