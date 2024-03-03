@@ -2,19 +2,20 @@ package me.eren.chiroptera;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ChiropteraServer {
 
     private static boolean isListening = false;
     protected static boolean shouldListen = true;
-    private static final Set<SocketChannel> authenticatedClients = new HashSet<>();
+    private static final Map<String, SocketChannel> authenticatedClients = new HashMap<>();
 
     protected static void listen(int port, int capacity, String secret) {
         if (isListening) return;
@@ -57,12 +58,15 @@ public class ChiropteraServer {
                         if (data.isEmpty()) continue; // we don't want empty data
 
                         // authenticate the client
-                        if (!authenticatedClients.contains(clientChannel)) {
-                            if (data.equals(secret)) {
-                                authenticatedClients.add(clientChannel);
-                                Chiroptera.getLog().info("A client authenticated! (" + getFormattedAddress(clientChannel) + ")");
+                        if (!authenticatedClients.containsValue(clientChannel)) {
+                            String[] loginData = data.split(" ");
+                            if (loginData.length != 2) continue;
+
+                            if (secret.equals(loginData[0])) { // secret
+                                authenticatedClients.put(loginData[1], clientChannel); // identifier
+                                Chiroptera.getLog().info("A client named " + loginData[1] + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
                             } else {
-                                Chiroptera.getLog().info("A client was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
+                                Chiroptera.getLog().info("A client named " + loginData[1] + " was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
                                 clientChannel.close();
                             }
                         } else { // the client is already authenticated. process the data
@@ -73,6 +77,17 @@ public class ChiropteraServer {
                 selector.selectedKeys().clear();
             }
         } catch (IOException e) {
+            if (e instanceof SocketException) { // remove all disconnected clients
+                authenticatedClients.entrySet().removeIf(entry -> {
+                    if (!entry.getValue().isConnected()) {
+                        System.out.println("A client named " + entry.getKey() + " disconnected.");
+                        return true;
+                    }
+                    return false;
+                });
+                return;
+            }
+
             throw new RuntimeException("Error while starting the server", e);
         }
     }
@@ -85,7 +100,7 @@ public class ChiropteraServer {
         try {
             ByteBuffer messageBuffer = ByteBuffer.wrap(message.getBytes());
 
-            for (SocketChannel channel : authenticatedClients) {
+            for (SocketChannel channel : authenticatedClients.values()) {
                 channel.write(messageBuffer.duplicate());
                 messageBuffer.rewind();
             }
