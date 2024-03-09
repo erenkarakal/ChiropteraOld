@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.InetSocketAddress;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 public final class Chiroptera extends JavaPlugin {
@@ -36,8 +37,9 @@ public final class Chiroptera extends JavaPlugin {
 
             } else if (type.equals("client")) {
                 String host = getConfig().getString("host", "0.0.0.0");
+                String clientIdentifier = getConfig().getString("client-identifier", UUID.randomUUID().toString());
                 InetSocketAddress address = new InetSocketAddress(host, port);
-                ChiropteraClient.connect(address, capacity, secret);
+                ChiropteraClient.connect(address, capacity, secret, clientIdentifier);
             }
         });
 

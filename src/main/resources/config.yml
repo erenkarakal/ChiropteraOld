@@ -3,7 +3,7 @@ type: server
 host: 0.0.0.0 # skip this if type is 'server'
 port: 25579
 
-# Capacity, in bytes that the connection accepts.
+# Capacity of data, in bytes that the connection accepts.
 # This is the recommended value.
 capacity: 1024
 
@@ -11,3 +11,5 @@ capacity: 1024
 # Make it strong and do not share it with anyone, obviously.
 # All of your servers must have the same secret.
 secret: 123abc
+
+client-identifier: testing

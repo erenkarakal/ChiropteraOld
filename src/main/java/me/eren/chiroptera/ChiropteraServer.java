@@ -1,20 +1,23 @@
 package me.eren.chiroptera;
 
+import me.eren.chiroptera.events.server.ClientConnectEvent;
+import me.eren.chiroptera.events.PacketRecievedEvent;
+import org.bukkit.Bukkit;
+
 import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.util.HashMap;
 import java.util.Map;
 
 public class ChiropteraServer {
 
     private static boolean isListening = false;
-    protected static boolean shouldListen = true;
+    protected volatile static boolean shouldListen = true;
     private static final Map<String, SocketChannel> authenticatedClients = new HashMap<>();
 
     protected static void listen(int port, int capacity, String secret) {
@@ -46,66 +49,97 @@ public class ChiropteraServer {
                         } else {
                             Chiroptera.getLog().warning("Got null client? This is not good.");
                         }
+
+                        Bukkit.getScheduler().runTaskLaterAsynchronously(Chiroptera.getInstance(), () -> {
+                            if (!authenticatedClients.containsValue(clientChannel)) {
+                                try {
+                                    // client did not authenticate in time, kick them.
+                                    if (clientChannel != null) {
+                                        Chiroptera.getLog().info("A client was kicked because they didn't authenticate in time. (" + getFormattedAddress(clientChannel) + ")");
+                                        clientChannel.close();
+                                    }
+                                } catch (IOException e) {
+                                    Chiroptera.getLog().warning("Error while kicking a client. " + e.getMessage());
+                                }
+                            }
+                        }, 100L); // 5 seconds
+
                     } else if (key.isReadable()) {
                         // read data from a connected client
                         SocketChannel clientChannel = (SocketChannel) key.channel();
                         ByteBuffer buffer = ByteBuffer.allocate(capacity);
                         int bytesRead = clientChannel.read(buffer);
                         if (bytesRead <= 0) continue; // there is no data to read.
-
                         buffer.flip();
-                        String data = new String(buffer.array(), 0, bytesRead).trim();
-                        if (data.isEmpty()) continue; // we don't want empty data
+                        if (!buffer.hasRemaining()) continue; // we don't want empty data
 
+                        byte[] dataBytes = new byte[bytesRead];
+                        buffer.get(dataBytes);
+
+                        Packet packet = Packet.deserialize(dataBytes);
+                        Chiroptera.getLog().info("packet: " + packet);
                         // authenticate the client
-                        if (!authenticatedClients.containsValue(clientChannel)) {
-                            String[] loginData = data.split(" ");
-                            if (loginData.length != 2) continue;
+                        if (!authenticatedClients.containsValue(clientChannel) && packet.id() == 0) {
+                            String loginIdentifier = (String) packet.data().get(0);
+                            String loginSecret = (String) packet.data().get(1);
 
-                            if (secret.equals(loginData[0])) { // secret
-                                authenticatedClients.put(loginData[1], clientChannel); // identifier
-                                Chiroptera.getLog().info("A client named " + loginData[1] + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
+                            if (secret.equals(loginSecret)) {
+                                authenticatedClients.put(loginIdentifier, clientChannel);
+                                Chiroptera.getLog().info("A client named " + loginIdentifier + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
+                                Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
+                                    ClientConnectEvent event = new ClientConnectEvent(loginIdentifier);
+                                    Bukkit.getPluginManager().callEvent(event);
+                                });
                             } else {
-                                Chiroptera.getLog().info("A client named " + loginData[1] + " was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
+                                Chiroptera.getLog().info("A client named " + loginIdentifier + " was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
                                 clientChannel.close();
                             }
                         } else { // the client is already authenticated. process the data
-                            Chiroptera.getLog().info("received data: " + data);
+                            Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
+                                PacketRecievedEvent event = new PacketRecievedEvent(packet);
+                                Bukkit.getPluginManager().callEvent(event);
+                            });
                         }
                     }
                 }
                 selector.selectedKeys().clear();
             }
         } catch (IOException e) {
-            if (e instanceof SocketException) { // remove all disconnected clients
-                authenticatedClients.entrySet().removeIf(entry -> {
-                    if (!entry.getValue().isConnected()) {
-                        Chiroptera.getLog().warning("A client named " + entry.getKey() + " disconnected.");
-                        return true;
-                    }
-                    return false;
-                });
-                return;
-            }
-
-            throw new RuntimeException("Error while starting the server", e);
+            if (e instanceof SocketException) return; // a client disconnected, no need for an exception
+            throw new RuntimeException("Error while starting/running the server", e);
         }
     }
 
     /**
-     * Broadcasts a message to all authenticated clients.
-     * @param message Message to broadcast
+     * Broadcasts a packet to all authenticated clients.
+     * @param packet Packet to broadcast
      */
-    public static void broadcastMessage(String message) {
-        try {
-            ByteBuffer messageBuffer = ByteBuffer.wrap(message.getBytes());
+    public static void broadcast(Packet packet) {
+        for (String clientID : authenticatedClients.keySet()) {
+            sendPacket(clientID, packet);
+        }
+    }
 
-            for (SocketChannel channel : authenticatedClients.values()) {
-                channel.write(messageBuffer.duplicate());
-                messageBuffer.rewind();
-            }
+    /**
+     * Sends a packet to a specific client. The client must be authenticated.
+     * @param clientIdentifier The ID of the client.
+     * @param packet Packet to send
+     */
+    public static void sendPacket(String clientIdentifier, Packet packet) {
+        if (!isListening) return;
+
+        SocketChannel client = authenticatedClients.get(clientIdentifier);
+        if (client == null) return;
+
+        try (OutputStream cos = client.socket().getOutputStream();
+             ObjectOutputStream oos = new ObjectOutputStream(cos)) {
+
+            client.configureBlocking(true);
+            oos.writeObject(packet);
+            client.configureBlocking(false);
+
         } catch (IOException e) {
-            throw new RuntimeException("Error while broadcasting a message.", e);
+            Chiroptera.getLog().warning("Error while sending a packet to " + getClientIdentifier(client) + ". " + e.getMessage());
         }
     }
 
@@ -116,8 +150,15 @@ public class ChiropteraServer {
             int clientPort = clientAddress.getPort();
             return clientIp + ":" + clientPort;
         } catch (IOException e) {
-            throw new RuntimeException("Error while formatting address.", e);
+            return "unknown";
         }
+    }
+
+    private static String getClientIdentifier(SocketChannel clientChannel) {
+        for (Map.Entry<String, SocketChannel> entry : authenticatedClients.entrySet()) {
+            if (entry.getValue().equals(clientChannel)) return entry.getKey();
+        }
+        return "unknown";
     }
 
 }
