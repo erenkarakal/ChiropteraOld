@@ -1,16 +1,17 @@
 package me.eren.chiroptera;
 
-import me.eren.chiroptera.events.server.ClientConnectEvent;
 import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.events.server.ClientConnectEvent;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,6 +36,7 @@ public class ChiropteraServer {
             Chiroptera.getLog().info("Listening on port " + port);
 
             while (shouldListen) {
+                selector.selectedKeys().clear();
                 selector.select();
 
                 for (SelectionKey key : selector.selectedKeys()) {
@@ -83,6 +85,12 @@ public class ChiropteraServer {
                             String loginIdentifier = (String) packet.data().get(0);
                             String loginSecret = (String) packet.data().get(1);
 
+                            // if it already exists, don't kick the other client
+                            if (authenticatedClients.containsKey(loginIdentifier)) {
+                                clientChannel.close();
+                                continue;
+                            }
+
                             if (secret.equals(loginSecret)) {
                                 authenticatedClients.put(loginIdentifier, clientChannel);
                                 Chiroptera.getLog().info("A client named " + loginIdentifier + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
@@ -102,7 +110,6 @@ public class ChiropteraServer {
                         }
                     }
                 }
-                selector.selectedKeys().clear();
             }
         } catch (IOException e) {
             if (e instanceof SocketException) return; // a client disconnected, no need for an exception
@@ -131,15 +138,13 @@ public class ChiropteraServer {
         SocketChannel client = authenticatedClients.get(clientIdentifier);
         if (client == null) return;
 
-        try (OutputStream cos = client.socket().getOutputStream();
-             ObjectOutputStream oos = new ObjectOutputStream(cos)) {
-
-            client.configureBlocking(true);
-            oos.writeObject(packet);
-            client.configureBlocking(false);
-
+        try {
+            ByteBuffer buffer = ByteBuffer.wrap(packet.serialize());
+            while (buffer.hasRemaining()) {
+                client.write(buffer);
+            }
         } catch (IOException e) {
-            Chiroptera.getLog().warning("Error while sending a packet to " + getClientIdentifier(client) + ". " + e.getMessage());
+            Chiroptera.getLog().warning("Error while sending data to client. " + e.getMessage());
         }
     }
 
