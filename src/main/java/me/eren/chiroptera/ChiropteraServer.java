@@ -2,6 +2,7 @@ package me.eren.chiroptera;
 
 import me.eren.chiroptera.events.PacketRecievedEvent;
 import me.eren.chiroptera.events.server.ClientConnectEvent;
+import me.eren.chiroptera.packets.AuthenticatePacket;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
@@ -81,9 +82,9 @@ public class ChiropteraServer {
                         Packet packet = Packet.deserialize(dataBytes);
                         Chiroptera.getLog().info("packet: " + packet);
                         // authenticate the client
-                        if (!authenticatedClients.containsValue(clientChannel) && packet.id() == 0) {
-                            String loginIdentifier = (String) packet.data().get(0);
-                            String loginSecret = (String) packet.data().get(1);
+                        if (!authenticatedClients.containsValue(clientChannel) && packet instanceof AuthenticatePacket authenticatePacket) {
+                            String loginIdentifier = authenticatePacket.getIdentifier();
+                            String loginSecret = authenticatePacket.getSecret();
 
                             // if it already exists, don't kick the other client
                             if (authenticatedClients.containsKey(loginIdentifier)) {

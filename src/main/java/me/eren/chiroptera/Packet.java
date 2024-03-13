@@ -1,11 +1,33 @@
 package me.eren.chiroptera;
 
+import me.eren.chiroptera.packets.CustomPacket;
+
 import java.io.*;
 import java.util.Map;
 
-public record Packet(byte id, Map<Integer, Serializable> data) implements Serializable {
+public abstract class Packet implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
+
+    private byte id;
+    private final Map<Integer, Serializable> data;
+
+    public Packet(byte id, Map<Integer, Serializable> data) {
+        this.id = id;
+        this.data = data;
+    }
+
+    public void setId(byte id) {
+        this.id = id;
+    }
+
+    public byte getId() {
+        return this.id;
+    }
+
+    public Map<Integer, Serializable> getData() {
+        return this.data;
+    }
 
     /**
      * @return The serialized packet, or an empty byte array if it fails to serialize.
@@ -33,7 +55,7 @@ public record Packet(byte id, Map<Integer, Serializable> data) implements Serial
             return (Packet) ois.readObject();
 
         } catch (IOException | ClassNotFoundException e) {
-            return new Packet((byte) -1, null);
+            return new CustomPacket((byte) -1, null);
         }
 
     }

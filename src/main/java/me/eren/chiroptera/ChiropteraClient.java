@@ -1,13 +1,13 @@
 package me.eren.chiroptera;
 
 import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.packets.AuthenticatePacket;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import java.util.Map;
 
 public class ChiropteraClient {
 
@@ -24,13 +24,13 @@ public class ChiropteraClient {
             isConnected = server.isConnected();
 
             // send the authentication packet
-            Packet authenticatePacket = new Packet((byte) 0, Map.of(0, identifier, 1, secret));
+            Packet authenticatePacket = new AuthenticatePacket(identifier, secret);
             sendPacket(authenticatePacket);
 
             // read the server's response
             ByteBuffer buffer = ByteBuffer.allocate(capacity);
 
-            while (!shouldDisconnect) {
+            while (!shouldDisconnect && isConnected) {
                 int bytesRead = server.read(buffer);
                 if (bytesRead <= 0) continue; // no data to read
                 buffer.flip();
