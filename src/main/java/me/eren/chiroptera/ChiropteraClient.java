@@ -1,7 +1,9 @@
 package me.eren.chiroptera;
 
 import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
 import me.eren.chiroptera.packets.AuthenticatePacket;
+import me.eren.chiroptera.packets.DisconnectPacket;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
@@ -11,17 +13,15 @@ import java.nio.channels.SocketChannel;
 
 public class ChiropteraClient {
 
-    private static boolean isConnected = false;
     protected static volatile boolean shouldDisconnect = false;
     private static SocketChannel server = null;
 
-    protected static void connect(InetSocketAddress address, int capacity, String secret, String identifier) {
-        if (isConnected) return;
+    public static void connect(InetSocketAddress address, int capacity, String secret, String identifier) {
+        if (server != null && server.isConnected()) return;
 
-        try (SocketChannel tempServer = SocketChannel.open()) {
-            server = tempServer;
+        try {
+            server = SocketChannel.open();
             server.connect(address);
-            isConnected = server.isConnected();
 
             // send the authentication packet
             Packet authenticatePacket = new AuthenticatePacket(identifier, secret);
@@ -30,7 +30,9 @@ public class ChiropteraClient {
             // read the server's response
             ByteBuffer buffer = ByteBuffer.allocate(capacity);
 
-            while (!shouldDisconnect && isConnected) {
+            ClientKeepAliveHandler.start();
+
+            while (!shouldDisconnect && server != null && server.isConnected()) {
                 int bytesRead = server.read(buffer);
                 if (bytesRead <= 0) continue; // no data to read
                 buffer.flip();
@@ -42,7 +44,7 @@ public class ChiropteraClient {
                 Packet packet = Packet.deserialize(dataBytes);
 
                 Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
-                    PacketRecievedEvent event = new PacketRecievedEvent(packet);
+                    PacketRecievedEvent event = new PacketRecievedEvent(packet, null);
                     Bukkit.getPluginManager().callEvent(event);
                 });
 
@@ -50,7 +52,26 @@ public class ChiropteraClient {
             }
 
         } catch (IOException e) {
-            throw new RuntimeException("Error while connecting/listening to the server.", e);
+            Chiroptera.getLog().warning("Error while connecting to the server. " + e.getMessage());
+
+        } finally {
+            disconnect();
+        }
+    }
+
+    public static void disconnect() {
+        if (server == null) return;
+
+        try {
+            shouldDisconnect = true;
+            DisconnectPacket disconnectPacket = new DisconnectPacket();
+            sendPacket(disconnectPacket);
+            server.close();
+            server = null;
+            ClientKeepAliveHandler.stop();
+            Chiroptera.getLog().info("Disconnected.");
+        } catch (IOException e) {
+            Chiroptera.getLog().warning("Error while disconnecting. " + e.getMessage());
         }
     }
 
@@ -59,7 +80,7 @@ public class ChiropteraClient {
      * @param packet Packet to send
      */
     public static void sendPacket(Packet packet) {
-        if (!isConnected || server == null) return;
+        if (server == null) return;
 
         try {
             byte[] serializedPacket = packet.serialize();

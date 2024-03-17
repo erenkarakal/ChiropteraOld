@@ -60,4 +60,9 @@ public abstract class Packet implements Serializable {
 
     }
 
+    @Override
+    public String toString() {
+        return "Packet: id=" + this.id + " data=" + this.data;
+    }
+
 }

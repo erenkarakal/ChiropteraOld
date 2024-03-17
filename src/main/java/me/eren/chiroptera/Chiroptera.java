@@ -1,9 +1,14 @@
 package me.eren.chiroptera;
 
+import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
+import me.eren.chiroptera.handlers.client.ClientKickHandler;
+import me.eren.chiroptera.handlers.server.ServerDisconnectHandler;
+import me.eren.chiroptera.handlers.server.ServerKeepAliveHandler;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -34,9 +39,16 @@ public final class Chiroptera extends JavaPlugin {
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             if (isServer) {
+                Bukkit.getPluginManager().registerEvents(new ServerKeepAliveHandler.KeepAliveListener(), this);
+                Bukkit.getPluginManager().registerEvents(new ServerDisconnectHandler(), this);
+                logger.info("Starting a listener on port " + port + "...");
+                List<String> whitelistedIps = getConfig().getStringList("whitelisted-ips");
+                if (!whitelistedIps.isEmpty()) ChiropteraServer.whitelistedIps.addAll(whitelistedIps);
                 ChiropteraServer.listen(port, capacity, secret);
 
             } else {
+                Bukkit.getPluginManager().registerEvents(new ClientKeepAliveHandler.KeepAliveListener(), this);
+                Bukkit.getPluginManager().registerEvents(new ClientKickHandler(), this);
                 String host = getConfig().getString("host", "0.0.0.0");
                 String clientIdentifier = getConfig().getString("client-identifier", UUID.randomUUID().toString());
                 InetSocketAddress address = new InetSocketAddress(host, port);

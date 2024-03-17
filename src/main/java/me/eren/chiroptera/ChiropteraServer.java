@@ -2,27 +2,29 @@ package me.eren.chiroptera;
 
 import me.eren.chiroptera.events.PacketRecievedEvent;
 import me.eren.chiroptera.events.server.ClientConnectEvent;
+import me.eren.chiroptera.handlers.server.ServerKeepAliveHandler;
 import me.eren.chiroptera.packets.AuthenticatePacket;
+import me.eren.chiroptera.packets.KickPacket;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ChiropteraServer {
 
-    private static boolean isListening = false;
+    private static boolean isListening;
     protected volatile static boolean shouldListen = true;
-    private static final Map<String, SocketChannel> authenticatedClients = new HashMap<>();
+    public static final Map<String, SocketChannel> authenticatedClients = new HashMap<>();
+    public static final List<String> whitelistedIps = new ArrayList<>();
 
-    protected static void listen(int port, int capacity, String secret) {
+    public static void listen(int port, int capacity, String secret) {
         if (isListening) return;
 
         try {
@@ -35,6 +37,7 @@ public class ChiropteraServer {
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
             isListening = true;
             Chiroptera.getLog().info("Listening on port " + port);
+            ServerKeepAliveHandler.startKeepingAlive();
 
             while (shouldListen) {
                 selector.selectedKeys().clear();
@@ -45,6 +48,15 @@ public class ChiropteraServer {
                         // accept a new connection
                         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
                         SocketChannel clientChannel = serverChannel.accept();
+                        if (!whitelistedIps.isEmpty()) { // check if ip whitelist is enabled and client is whitelisted
+                            String ip = getFormattedAddress(clientChannel).split(":")[0];
+                            if (!whitelistedIps.contains(ip)) {
+                                KickPacket kickPacket = new KickPacket("Not whitelisted.");
+                                sendPacket(clientChannel, kickPacket);
+                                clientChannel.close();
+                                return;
+                            }
+                        }
                         if (clientChannel != null) {
                             clientChannel.configureBlocking(false);
                             clientChannel.register(selector, SelectionKey.OP_READ);
@@ -59,6 +71,8 @@ public class ChiropteraServer {
                                     // client did not authenticate in time, kick them.
                                     if (clientChannel != null) {
                                         Chiroptera.getLog().info("A client was kicked because they didn't authenticate in time. (" + getFormattedAddress(clientChannel) + ")");
+                                        KickPacket kickPacket = new KickPacket("Did not authenticate in time.");
+                                        sendPacket(clientChannel, kickPacket);
                                         clientChannel.close();
                                     }
                                 } catch (IOException e) {
@@ -88,6 +102,8 @@ public class ChiropteraServer {
 
                             // if it already exists, don't kick the other client
                             if (authenticatedClients.containsKey(loginIdentifier)) {
+                                KickPacket kickPacket = new KickPacket("Client with this identifier already exists.");
+                                sendPacket(clientChannel, kickPacket);
                                 clientChannel.close();
                                 continue;
                             }
@@ -95,6 +111,7 @@ public class ChiropteraServer {
                             if (secret.equals(loginSecret)) {
                                 authenticatedClients.put(loginIdentifier, clientChannel);
                                 Chiroptera.getLog().info("A client named " + loginIdentifier + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
+                                ServerKeepAliveHandler.respondedClients.add(loginIdentifier); // to avoid false kicks due to connecting on a bad time.
                                 Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
                                     ClientConnectEvent event = new ClientConnectEvent(loginIdentifier);
                                     Bukkit.getPluginManager().callEvent(event);
@@ -105,7 +122,7 @@ public class ChiropteraServer {
                             }
                         } else { // the client is already authenticated. process the data
                             Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
-                                PacketRecievedEvent event = new PacketRecievedEvent(packet);
+                                PacketRecievedEvent event = new PacketRecievedEvent(packet, getClientIdentifier(clientChannel));
                                 Bukkit.getPluginManager().callEvent(event);
                             });
                         }
@@ -113,9 +130,23 @@ public class ChiropteraServer {
                 }
             }
         } catch (IOException e) {
-            if (e instanceof SocketException) return; // a client disconnected, no need for an exception
-            throw new RuntimeException("Error while starting/running the server", e);
+            if (e instanceof ClosedChannelException || e instanceof SocketException) return;
+            Chiroptera.getLog().warning("Got an error while starting/running the server. " + e.getMessage());
+            e.printStackTrace(System.out);
+        } finally {
+            close();
         }
+    }
+
+    public static void close() {
+        if (!isListening) return;
+
+        isListening = false;
+        shouldListen = false;
+        KickPacket kickPacket = new KickPacket("Server closed.");
+        broadcast(kickPacket);
+        authenticatedClients.clear();
+        ServerKeepAliveHandler.stopKeepingAlive();
     }
 
     /**
@@ -132,20 +163,26 @@ public class ChiropteraServer {
      * Sends a packet to a specific client. The client must be authenticated.
      * @param clientIdentifier The ID of the client.
      * @param packet Packet to send
+     * @return true if the packet was successfully sent
      */
-    public static void sendPacket(String clientIdentifier, Packet packet) {
-        if (!isListening) return;
+    public static boolean sendPacket(String clientIdentifier, Packet packet) {
+        if (!isListening) return false;
 
         SocketChannel client = authenticatedClients.get(clientIdentifier);
-        if (client == null) return;
+        if (client == null) return false;
 
+        return sendPacket(client, packet);
+    }
+
+    private static boolean sendPacket(SocketChannel client, Packet packet) {
         try {
             ByteBuffer buffer = ByteBuffer.wrap(packet.serialize());
             while (buffer.hasRemaining()) {
                 client.write(buffer);
             }
+            return true;
         } catch (IOException e) {
-            Chiroptera.getLog().warning("Error while sending data to client. " + e.getMessage());
+            return false;
         }
     }
 
@@ -160,11 +197,12 @@ public class ChiropteraServer {
         }
     }
 
-    private static String getClientIdentifier(SocketChannel clientChannel) {
+    public static String getClientIdentifier(SocketChannel clientChannel) {
         for (Map.Entry<String, SocketChannel> entry : authenticatedClients.entrySet()) {
             if (entry.getValue().equals(clientChannel)) return entry.getKey();
         }
         return "unknown";
     }
+
 
 }

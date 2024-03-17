@@ -4,6 +4,9 @@ import me.eren.chiroptera.Packet;
 
 import java.util.Map;
 
+/**
+ * Sent by the client as soon as they connect, if the client doesn't send this packet within 5 seconds, they get kicked.
+ */
 public class AuthenticatePacket extends Packet {
 
     private final String identifier;
@@ -22,4 +25,5 @@ public class AuthenticatePacket extends Packet {
     public String getSecret() {
         return this.secret;
     }
+
 }
