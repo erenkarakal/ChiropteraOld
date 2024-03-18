@@ -3,6 +3,8 @@ package me.eren.chiroptera.handlers.server;
 import me.eren.chiroptera.Chiroptera;
 import me.eren.chiroptera.ChiropteraServer;
 import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.events.server.ClientDisconnectEvent;
+import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
 import me.eren.chiroptera.packets.KeepAlivePacket;
 import me.eren.chiroptera.packets.KickPacket;
 import org.bukkit.Bukkit;
@@ -57,6 +59,10 @@ public class ServerKeepAliveHandler {
             }
             try {
                 ChiropteraServer.sendPacket(entry.getKey(), kickPacket);
+                Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
+                    ClientDisconnectEvent event = new ClientDisconnectEvent(entry.getKey(), true);
+                    Bukkit.getPluginManager().callEvent(event);
+                });
                 entry.getValue().close();
             } catch (IOException ignored) {}
         }

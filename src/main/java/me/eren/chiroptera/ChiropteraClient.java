@@ -15,6 +15,8 @@ public class ChiropteraClient {
 
     protected static volatile boolean shouldDisconnect = false;
     private static SocketChannel server = null;
+    private static int reconnectAttempts = 0;
+    private static final int MAX_RECONNECT_ATTEMPTS = 15;
 
     public static void connect(InetSocketAddress address, int capacity, String secret, String identifier) {
         if (server != null && server.isConnected()) return;
@@ -31,6 +33,7 @@ public class ChiropteraClient {
             ByteBuffer buffer = ByteBuffer.allocate(capacity);
 
             ClientKeepAliveHandler.start();
+            reconnectAttempts = 0;
 
             while (!shouldDisconnect && server != null && server.isConnected()) {
                 int bytesRead = server.read(buffer);
@@ -52,9 +55,20 @@ public class ChiropteraClient {
             }
 
         } catch (IOException e) {
-            Chiroptera.getLog().warning("Error while connecting to the server. " + e.getMessage());
+            if (shouldDisconnect) return;
 
-        } finally {
+            if (reconnectAttempts == 0) {
+                Chiroptera.getLog().warning("Connection failed, will try 15 more times with a 10 second interval...");
+            }
+
+            if (reconnectAttempts++ < MAX_RECONNECT_ATTEMPTS) {
+                Bukkit.getScheduler().runTaskLaterAsynchronously(Chiroptera.getInstance(), () ->
+                                connect(address, capacity, secret, identifier),
+                        200L); // 10 seconds later
+                return;
+            }
+
+            Chiroptera.getLog().warning("Error while connecting to the server. " + e.getMessage());
             disconnect();
         }
     }
@@ -63,12 +77,13 @@ public class ChiropteraClient {
         if (server == null) return;
 
         try {
-            shouldDisconnect = true;
-            DisconnectPacket disconnectPacket = new DisconnectPacket();
-            sendPacket(disconnectPacket);
-            server.close();
-            server = null;
+            if (server.isConnected()) {
+                DisconnectPacket disconnectPacket = new DisconnectPacket();
+                sendPacket(disconnectPacket);
+            }
             ClientKeepAliveHandler.stop();
+            server.close();
+            shouldDisconnect = true;
             Chiroptera.getLog().info("Disconnected.");
         } catch (IOException e) {
             Chiroptera.getLog().warning("Error while disconnecting. " + e.getMessage());

@@ -94,7 +94,6 @@ public class ChiropteraServer {
                         buffer.get(dataBytes);
 
                         Packet packet = Packet.deserialize(dataBytes);
-                        Chiroptera.getLog().info("packet: " + packet);
                         // authenticate the client
                         if (!authenticatedClients.containsValue(clientChannel) && packet instanceof AuthenticatePacket authenticatePacket) {
                             String loginIdentifier = authenticatePacket.getIdentifier();

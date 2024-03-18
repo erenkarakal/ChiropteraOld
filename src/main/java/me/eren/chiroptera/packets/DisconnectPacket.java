@@ -8,6 +8,6 @@ import me.eren.chiroptera.Packet;
  */
 public class DisconnectPacket extends Packet {
     public DisconnectPacket() {
-        super((byte) 3, null);
+        super((byte) -4, null);
     }
 }

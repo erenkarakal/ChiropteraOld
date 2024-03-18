@@ -41,7 +41,7 @@ public class ClientKeepAliveHandler {
         public void onKeepAlivePacket(PacketRecievedEvent e) {
             if (e.getPacket() instanceof KeepAlivePacket keepAlivePacket) {
                 ChiropteraClient.sendPacket(keepAlivePacket);
-                long newTimeout = System.currentTimeMillis() + 21_000;
+                long newTimeout = System.currentTimeMillis() + 25_000; // 25 seconds
                 if (newTimeout > TIMEOUT_TIME) {
                     TIMEOUT_TIME = newTimeout;
                 }
