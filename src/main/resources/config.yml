@@ -1,15 +1,32 @@
+# Whether this server is a ChiropteraServer or a ChiropteraClient.
+# values: server/client
 type: server
 
-host: 0.0.0.0 # skip this if type is 'server'
-port: 25579
+# IP of the ChiropteraServer the ChiropteraClient should connect to.
+# Skip this if 'type' is 'server'.
+host: 0.0.0.0
+
+# If the 'type' is server, this is the port that the ChiropteraServer will be hosted on.
+# Otherwise, it is port of the ChiropteraServer the ChiropteraClient should connect to.
+port: 53415
 
 # Capacity of data, in bytes that the connection accepts.
 # This is the recommended value.
+# Make sure the capacity is the same on all clients and server.
 capacity: 1024
 
 # The secret required to connect to the server (or to accept connections as the server).
 # Make it strong and do not share it with anyone, obviously.
-# All of your servers must have the same secret.
+# All of your servers and clients must have the same secret.
 secret: 123abc
 
+# The ID of the client if 'type' is 'client'
+# This is used while sending packets. More than 1 client with the same ID can't exist.
 client-identifier: testing
+
+# Connections from IPs that are not whitelisted will be rejected instantly.
+# Not required but recommended to use.
+# Leave empty to disable whitelist.
+# ex. ["125.62.5.21", "8.63.42.105"]
+# Skip this if 'type' is 'client'.
+whitelisted-ips: []

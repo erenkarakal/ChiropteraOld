@@ -12,7 +12,7 @@ public class KickPacket extends Packet {
     private final String reason;
 
     public KickPacket(String reason) {
-        super((byte) -3, Map.of(0, reason));
+        super((byte) -4, Map.of(0, reason));
         this.reason = reason;
     }
 

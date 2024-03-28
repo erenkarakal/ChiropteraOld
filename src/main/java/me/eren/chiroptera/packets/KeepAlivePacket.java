@@ -12,7 +12,7 @@ public class KeepAlivePacket extends Packet {
     private final byte random;
 
     public KeepAlivePacket(byte random) {
-        super((byte) -2, Map.of(0, random));
+        super((byte) -3, Map.of(0, random));
         this.random = random;
     }
 

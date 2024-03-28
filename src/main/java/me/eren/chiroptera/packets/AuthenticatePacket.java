@@ -13,7 +13,7 @@ public class AuthenticatePacket extends Packet {
     private final String secret;
 
     public AuthenticatePacket(String identifier, String secret) {
-        super((byte) -1, Map.of(0, identifier, 1, secret));
+        super((byte) -2, Map.of(0, identifier, 1, secret));
         this.identifier = identifier;
         this.secret = secret;
     }

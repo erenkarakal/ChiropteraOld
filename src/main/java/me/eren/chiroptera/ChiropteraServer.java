@@ -1,11 +1,10 @@
 package me.eren.chiroptera;
 
-import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.events.PacketReceivedEvent;
 import me.eren.chiroptera.events.server.ClientConnectEvent;
 import me.eren.chiroptera.handlers.server.ServerKeepAliveHandler;
 import me.eren.chiroptera.packets.AuthenticatePacket;
 import me.eren.chiroptera.packets.KickPacket;
-import org.bukkit.Bukkit;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -16,11 +15,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ChiropteraServer {
 
     private static boolean isListening;
-    protected volatile static boolean shouldListen = true;
+    protected static boolean shouldListen = true;
     public static final Map<String, SocketChannel> authenticatedClients = new HashMap<>();
     public static final List<String> whitelistedIps = new ArrayList<>();
 
@@ -65,7 +65,7 @@ public class ChiropteraServer {
                             Chiroptera.getLog().warning("Got null client? This is not good.");
                         }
 
-                        Bukkit.getScheduler().runTaskLaterAsynchronously(Chiroptera.getInstance(), () -> {
+                        Chiroptera.getScheduler().schedule(() -> {
                             if (!authenticatedClients.containsValue(clientChannel)) {
                                 try {
                                     // client did not authenticate in time, kick them.
@@ -79,7 +79,7 @@ public class ChiropteraServer {
                                     Chiroptera.getLog().warning("Error while kicking a client. " + e.getMessage());
                                 }
                             }
-                        }, 100L); // 5 seconds
+                        }, 5, TimeUnit.SECONDS);
 
                     } else if (key.isReadable()) {
                         // read data from a connected client
@@ -111,19 +111,15 @@ public class ChiropteraServer {
                                 authenticatedClients.put(loginIdentifier, clientChannel);
                                 Chiroptera.getLog().info("A client named " + loginIdentifier + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
                                 ServerKeepAliveHandler.respondedClients.add(loginIdentifier); // to avoid false kicks due to connecting on a bad time.
-                                Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
-                                    ClientConnectEvent event = new ClientConnectEvent(loginIdentifier);
-                                    Bukkit.getPluginManager().callEvent(event);
-                                });
+                                ClientConnectEvent event = new ClientConnectEvent(loginIdentifier);
+                                Chiroptera.getEventBus().post(event);
                             } else {
                                 Chiroptera.getLog().info("A client named " + loginIdentifier + " was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
                                 clientChannel.close();
                             }
                         } else { // the client is already authenticated. process the data
-                            Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
-                                PacketRecievedEvent event = new PacketRecievedEvent(packet, getClientIdentifier(clientChannel));
-                                Bukkit.getPluginManager().callEvent(event);
-                            });
+                            PacketReceivedEvent event = new PacketReceivedEvent(packet, getClientIdentifier(clientChannel));
+                            Chiroptera.getEventBus().post(event);
                         }
                     }
                 }
@@ -161,8 +157,8 @@ public class ChiropteraServer {
     /**
      * Sends a packet to a specific client. The client must be authenticated.
      * @param clientIdentifier The ID of the client.
-     * @param packet Packet to send
-     * @return true if the packet was successfully sent
+     * @param packet Packet to send.
+     * @return true if the packet was successfully sent.
      */
     public static boolean sendPacket(String clientIdentifier, Packet packet) {
         if (!isListening) return false;

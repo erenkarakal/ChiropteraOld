@@ -1,19 +1,20 @@
 package me.eren.chiroptera;
 
-import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.events.PacketReceivedEvent;
 import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
 import me.eren.chiroptera.packets.AuthenticatePacket;
 import me.eren.chiroptera.packets.DisconnectPacket;
-import org.bukkit.Bukkit;
+import me.eren.chiroptera.packets.ForwardPacket;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.TimeUnit;
 
 public class ChiropteraClient {
 
-    protected static volatile boolean shouldDisconnect = false;
+    protected static boolean shouldDisconnect = false;
     private static SocketChannel server = null;
     private static int reconnectAttempts = 0;
     private static final int MAX_RECONNECT_ATTEMPTS = 15;
@@ -45,11 +46,8 @@ public class ChiropteraClient {
                 buffer.get(dataBytes);
 
                 Packet packet = Packet.deserialize(dataBytes);
-
-                Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
-                    PacketRecievedEvent event = new PacketRecievedEvent(packet, null);
-                    Bukkit.getPluginManager().callEvent(event);
-                });
+                PacketReceivedEvent event = new PacketReceivedEvent(packet, null);
+                Chiroptera.getEventBus().post(event);
 
                 buffer.clear(); // clear for the next read
             }
@@ -62,9 +60,7 @@ public class ChiropteraClient {
             }
 
             if (reconnectAttempts++ < MAX_RECONNECT_ATTEMPTS) {
-                Bukkit.getScheduler().runTaskLaterAsynchronously(Chiroptera.getInstance(), () ->
-                                connect(address, capacity, secret, identifier),
-                        200L); // 10 seconds later
+                Chiroptera.getScheduler().schedule(() -> connect(address, capacity, secret, identifier), 10, TimeUnit.SECONDS);
                 return;
             }
 
@@ -93,9 +89,10 @@ public class ChiropteraClient {
     /**
      * Sends a packet to the connected server.
      * @param packet Packet to send
+     * @return true if the packet was successfully sent.
      */
-    public static void sendPacket(Packet packet) {
-        if (server == null) return;
+    public static boolean sendPacket(Packet packet) {
+        if (server == null) return false;
 
         try {
             byte[] serializedPacket = packet.serialize();
@@ -103,9 +100,21 @@ public class ChiropteraClient {
             while (buffer.hasRemaining()) {
                 server.write(buffer);
             }
+            return true;
         } catch (IOException e) {
-            Chiroptera.getLog().warning("Error while sending a packet. " + e.getMessage());
+            return false;
         }
+    }
+
+    /**
+     * Uses the built-in Forward Packet to forward a packet to a specific client.
+     * @param clientIdentifier The ID of the client.
+     * @param packet Packet to send.
+     * @return true if the packet was successfully sent.
+     */
+    public static boolean sendPacket(String clientIdentifier, Packet packet) {
+        ForwardPacket forwardPacket = new ForwardPacket(clientIdentifier, packet);
+        return sendPacket(forwardPacket);
     }
 
 }

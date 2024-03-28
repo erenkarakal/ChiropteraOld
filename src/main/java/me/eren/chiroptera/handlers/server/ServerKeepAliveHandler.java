@@ -1,16 +1,12 @@
 package me.eren.chiroptera.handlers.server;
 
+import com.google.common.eventbus.Subscribe;
 import me.eren.chiroptera.Chiroptera;
 import me.eren.chiroptera.ChiropteraServer;
-import me.eren.chiroptera.events.PacketRecievedEvent;
+import me.eren.chiroptera.events.PacketReceivedEvent;
 import me.eren.chiroptera.events.server.ClientDisconnectEvent;
-import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
 import me.eren.chiroptera.packets.KeepAlivePacket;
 import me.eren.chiroptera.packets.KickPacket;
-import org.bukkit.Bukkit;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
@@ -18,10 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class ServerKeepAliveHandler {
 
-    private static BukkitTask bukkitTask = null;
+    private static ScheduledFuture<?> keepAliveTask = null;
     private static byte currentByte = (byte) 0;
     public static final List<String> respondedClients = new ArrayList<>();
 
@@ -32,22 +30,22 @@ public class ServerKeepAliveHandler {
         KeepAlivePacket initialKeepAlivePacket = new KeepAlivePacket((byte) 0);
         ChiropteraServer.broadcast(initialKeepAlivePacket);
 
-        bukkitTask = Bukkit.getScheduler().runTaskTimerAsynchronously(Chiroptera.getInstance(), () -> {
-
+        keepAliveTask = Chiroptera.getScheduler().scheduleWithFixedDelay(() -> {
             kickDeadClients();
             currentByte = (byte) new Random().nextInt(255);
             KeepAlivePacket keepAlivePacket = new KeepAlivePacket(currentByte);
             ChiropteraServer.broadcast(keepAlivePacket);
 
         },
-        100L, // start the task 5 seconds later to wait for initial packet response
-        500L); // 20 seconds + 5 more seconds to wait for response
+        5, // start the task 5 seconds later to wait for initial packet response
+        25, // 20 seconds keep alive + 5 more seconds to wait for response
+        TimeUnit.SECONDS);
     }
 
     public static void stopKeepingAlive() {
-        if (bukkitTask == null) return;
-        bukkitTask.cancel();
-        bukkitTask = null;
+        if (keepAliveTask == null) return;
+        keepAliveTask.cancel(true);
+        keepAliveTask = null;
     }
 
     private static void kickDeadClients() {
@@ -59,18 +57,16 @@ public class ServerKeepAliveHandler {
             }
             try {
                 ChiropteraServer.sendPacket(entry.getKey(), kickPacket);
-                Bukkit.getScheduler().runTask(Chiroptera.getInstance(), () -> {
-                    ClientDisconnectEvent event = new ClientDisconnectEvent(entry.getKey(), true);
-                    Bukkit.getPluginManager().callEvent(event);
-                });
+                ClientDisconnectEvent event = new ClientDisconnectEvent(entry.getKey(), true);
+                Chiroptera.getEventBus().post(event);
                 entry.getValue().close();
             } catch (IOException ignored) {}
         }
     }
 
-    public static class KeepAliveListener implements Listener {
-        @EventHandler
-        public void onKeepAlivePacket(PacketRecievedEvent e) {
+    public static class KeepAliveListener {
+        @Subscribe
+        public void handleKeepAlivePacket(PacketReceivedEvent e) {
             if (e.getPacket() instanceof KeepAlivePacket keepAlivePacket &&
                     keepAlivePacket.getRandom() == currentByte) {
                 respondedClients.add(e.getClientIdentifier());
