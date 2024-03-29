@@ -1,10 +1,10 @@
 package me.eren.chiroptera;
 
-import me.eren.chiroptera.events.PacketReceivedEvent;
-import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
 import me.eren.chiroptera.packets.AuthenticatePacket;
 import me.eren.chiroptera.packets.DisconnectPacket;
 import me.eren.chiroptera.packets.ForwardPacket;
+import me.eren.chiroptera.events.PacketReceivedEvent;
+import me.eren.chiroptera.handlers.client.ClientKeepAliveHandler;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 public class ChiropteraClient {
 
-    protected static boolean shouldDisconnect = false;
+    public static boolean shouldDisconnect = false;
     private static SocketChannel server = null;
     private static int reconnectAttempts = 0;
     private static final int MAX_RECONNECT_ATTEMPTS = 15;
@@ -56,7 +56,7 @@ public class ChiropteraClient {
             if (shouldDisconnect) return;
 
             if (reconnectAttempts == 0) {
-                Chiroptera.getLog().warning("Connection failed, will try 15 more times with a 10 second interval...");
+                Chiroptera.getLogger().warning("Connection failed, will try 15 more times with a 10 second interval...");
             }
 
             if (reconnectAttempts++ < MAX_RECONNECT_ATTEMPTS) {
@@ -64,7 +64,7 @@ public class ChiropteraClient {
                 return;
             }
 
-            Chiroptera.getLog().warning("Error while connecting to the server. " + e.getMessage());
+            Chiroptera.getLogger().warning("Error while connecting to the server. " + e.getMessage());
             disconnect();
         }
     }
@@ -80,9 +80,9 @@ public class ChiropteraClient {
             ClientKeepAliveHandler.stop();
             server.close();
             shouldDisconnect = true;
-            Chiroptera.getLog().info("Disconnected.");
+            Chiroptera.getLogger().info("Disconnected.");
         } catch (IOException e) {
-            Chiroptera.getLog().warning("Error while disconnecting. " + e.getMessage());
+            Chiroptera.getLogger().warning("Error while disconnecting. " + e.getMessage());
         }
     }
 

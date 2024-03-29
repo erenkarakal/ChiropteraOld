@@ -9,9 +9,9 @@ import me.eren.chiroptera.packets.KickPacket;
 public class ClientKickHandler {
     @Subscribe
     public void handleKickPacket(PacketReceivedEvent e) {
-        if (e.getPacket() instanceof KickPacket kickPacket) {
+        if (e.packet() instanceof KickPacket kickPacket) {
             ChiropteraClient.disconnect();
-            Chiroptera.getLog().warning("Got kicked by the server. Reason: " + kickPacket.getReason());
+            Chiroptera.getLogger().warning("Got kicked by the server. Reason: " + kickPacket.getReason());
         }
     }
 }

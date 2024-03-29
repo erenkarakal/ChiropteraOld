@@ -67,9 +67,9 @@ public class ServerKeepAliveHandler {
     public static class KeepAliveListener {
         @Subscribe
         public void handleKeepAlivePacket(PacketReceivedEvent e) {
-            if (e.getPacket() instanceof KeepAlivePacket keepAlivePacket &&
+            if (e.packet() instanceof KeepAlivePacket keepAlivePacket &&
                     keepAlivePacket.getRandom() == currentByte) {
-                respondedClients.add(e.getClientIdentifier());
+                respondedClients.add(e.clientIdentifier());
             }
         }
     }

@@ -1,10 +1,10 @@
 package me.eren.chiroptera;
 
+import me.eren.chiroptera.packets.AuthenticatePacket;
+import me.eren.chiroptera.packets.KickPacket;
 import me.eren.chiroptera.events.PacketReceivedEvent;
 import me.eren.chiroptera.events.server.ClientConnectEvent;
 import me.eren.chiroptera.handlers.server.ServerKeepAliveHandler;
-import me.eren.chiroptera.packets.AuthenticatePacket;
-import me.eren.chiroptera.packets.KickPacket;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -36,7 +36,7 @@ public class ChiropteraServer {
             Selector selector = Selector.open();
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
             isListening = true;
-            Chiroptera.getLog().info("Listening on port " + port);
+            Chiroptera.getLogger().info("Listening on port " + port);
             ServerKeepAliveHandler.startKeepingAlive();
 
             while (shouldListen) {
@@ -60,9 +60,9 @@ public class ChiropteraServer {
                         if (clientChannel != null) {
                             clientChannel.configureBlocking(false);
                             clientChannel.register(selector, SelectionKey.OP_READ);
-                            Chiroptera.getLog().info("A client connected! (" + getFormattedAddress(clientChannel) + ")");
+                            Chiroptera.getLogger().info("A client connected! (" + getFormattedAddress(clientChannel) + ")");
                         } else {
-                            Chiroptera.getLog().warning("Got null client? This is not good.");
+                            Chiroptera.getLogger().warning("Got null client? This is not good.");
                         }
 
                         Chiroptera.getScheduler().schedule(() -> {
@@ -70,13 +70,13 @@ public class ChiropteraServer {
                                 try {
                                     // client did not authenticate in time, kick them.
                                     if (clientChannel != null) {
-                                        Chiroptera.getLog().info("A client was kicked because they didn't authenticate in time. (" + getFormattedAddress(clientChannel) + ")");
+                                        Chiroptera.getLogger().info("A client was kicked because they didn't authenticate in time. (" + getFormattedAddress(clientChannel) + ")");
                                         KickPacket kickPacket = new KickPacket("Did not authenticate in time.");
                                         sendPacket(clientChannel, kickPacket);
                                         clientChannel.close();
                                     }
                                 } catch (IOException e) {
-                                    Chiroptera.getLog().warning("Error while kicking a client. " + e.getMessage());
+                                    Chiroptera.getLogger().warning("Error while kicking a client. " + e.getMessage());
                                 }
                             }
                         }, 5, TimeUnit.SECONDS);
@@ -109,12 +109,12 @@ public class ChiropteraServer {
 
                             if (secret.equals(loginSecret)) {
                                 authenticatedClients.put(loginIdentifier, clientChannel);
-                                Chiroptera.getLog().info("A client named " + loginIdentifier + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
+                                Chiroptera.getLogger().info("A client named " + loginIdentifier + " authenticated! (" + getFormattedAddress(clientChannel) + ")");
                                 ServerKeepAliveHandler.respondedClients.add(loginIdentifier); // to avoid false kicks due to connecting on a bad time.
                                 ClientConnectEvent event = new ClientConnectEvent(loginIdentifier);
                                 Chiroptera.getEventBus().post(event);
                             } else {
-                                Chiroptera.getLog().info("A client named " + loginIdentifier + " was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
+                                Chiroptera.getLogger().info("A client named " + loginIdentifier + " was disconnected for wrong secret. (" + getFormattedAddress(clientChannel) + ")");
                                 clientChannel.close();
                             }
                         } else { // the client is already authenticated. process the data
@@ -126,7 +126,7 @@ public class ChiropteraServer {
             }
         } catch (IOException e) {
             if (e instanceof ClosedChannelException || e instanceof SocketException) return;
-            Chiroptera.getLog().warning("Got an error while starting/running the server. " + e.getMessage());
+            Chiroptera.getLogger().warning("Got an error while starting/running the server. " + e.getMessage());
             e.printStackTrace(System.out);
         } finally {
             close();

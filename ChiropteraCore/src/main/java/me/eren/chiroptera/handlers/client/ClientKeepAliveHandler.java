@@ -21,8 +21,8 @@ public class ClientKeepAliveHandler {
     public static void start() {
         keepAliveTask = Chiroptera.getScheduler().scheduleWithFixedDelay(() -> {
                     if (System.currentTimeMillis() > TIMEOUT_TIME) {
-                        Chiroptera.getLog().warning("Server timed out.");
-                        ChiropteraClient.disconnect();
+                        Chiroptera.getLogger().warning("Server timed out.");
+                        ChiropteraClient.shouldDisconnect = true;
                     }
                 },
                 20, // start 20 seconds later
@@ -40,7 +40,7 @@ public class ClientKeepAliveHandler {
     public static class KeepAliveListener {
         @Subscribe
         public void handleKeepAlivePacket(PacketReceivedEvent e) {
-            if (e.getPacket() instanceof KeepAlivePacket keepAlivePacket) {
+            if (e.packet() instanceof KeepAlivePacket keepAlivePacket) {
                 ChiropteraClient.sendPacket(keepAlivePacket);
                 long newTimeout = System.currentTimeMillis() + 25_000; // 25 seconds
                 if (newTimeout > TIMEOUT_TIME) {

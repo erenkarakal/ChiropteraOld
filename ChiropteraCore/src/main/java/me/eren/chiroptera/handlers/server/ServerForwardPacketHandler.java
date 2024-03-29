@@ -8,7 +8,7 @@ import me.eren.chiroptera.packets.ForwardPacket;
 public class ServerForwardPacketHandler {
     @Subscribe
     public void handleForwardPacket(PacketReceivedEvent e) {
-        if (e.getPacket() instanceof ForwardPacket packet) {
+        if (e.packet() instanceof ForwardPacket packet) {
             ChiropteraServer.sendPacket(packet.getClientToSend(), packet.getPacketToSend());
         }
     }
